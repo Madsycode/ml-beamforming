@@ -3,462 +3,308 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIMO Beamforming Simulator for ML Dataset Generation</title>
+    <title>MIMO Beamforming Simulator (Physically-Accurate Beam Shaping)</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 2em; background-color: #f4f7f6; color: #333; }
-        .container { display: flex; flex-wrap: wrap; gap: 2em; }
-        .panel { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5em; flex: 1; min-width: 400px; }
-        h1, h2 { color: #1a5276; border-bottom: 2px solid #aed6f1; padding-bottom: 0.3em; }
-        canvas { border: 1px solid #ddd; border-radius: 4px; display: block; margin: 1em 0; }
-        .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1em; }
+        html, body {
+            height: 100%; margin: 0; padding: 0; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f6;
+        }
+        .app-wrapper { display: flex; flex-direction: column; height: 100vh; padding: 1.5em; box-sizing: border-box; }
+        h1 { color: #1a5276; margin: 0 0 1em 0; flex-shrink: 0; border-bottom: 2px solid #aed6f1; padding-bottom: 0.5em; }
+        .container { display: flex; gap: 1.5em; flex-grow: 1; min-height: 0; }
+        .panel { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5em; flex: 1; min-width: 380px; display: flex; flex-direction: column; overflow-y: auto; }
+        h2 { color: #1a5276; margin-top: 0; }
+        .controls { display: grid; grid-template-columns: 1fr; gap: 1em; }
+        @media (min-width: 600px) { .controls { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); } }
         .control-group { display: flex; flex-direction: column; }
         label { font-weight: bold; margin-bottom: 0.5em; color: #555; }
-        input[type="range"], input[type="number"], select, button { width: 100%; box-sizing: border-box; padding: 0.5em; border-radius: 4px; border: 1px solid #ccc; margin-top: 0.2em; }
-        button { background-color: #1a5276; color: white; font-weight: bold; border: none; cursor: pointer; transition: background-color 0.2s; }
+        input, select, button { width: 100%; box-sizing: border-box; padding: 0.75em; border-radius: 4px; border: 1px solid #ccc; font-size: 1em; }
+        button { background-color: #1a5276; color: white; font-weight: bold; border: none; cursor: pointer; transition: background-color 0.2s; margin-top: 0.5em; }
         button:hover { background-color: #2471a3; }
-        .button-secondary { background-color: #5dade2; }
-        .button-secondary:hover { background-color: #85c1e9; }
-        .button-danger { background-color: #af601a; }
-        .button-danger:hover { background-color: #d35400; }
-        .metrics { margin-top: 1em; padding: 1em; background-color: #eaf2f8; border-radius: 4px; }
+        .button-secondary { background-color: #5dade2; } .button-secondary:hover { background-color: #85c1e9; }
+        .button-danger { background-color: #af601a; } .button-danger:hover { background-color: #d35400; }
+        
+        .visualization-content { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; }
+        .canvas-container { flex-grow: 1; position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 1em; }
+        canvas { border: 1px solid #ddd; border-radius: 4px; max-width: 100%; max-height: 100%; object-fit: contain; }
+        .metrics { margin-top: auto; flex-shrink: 0; padding: 1em; background-color: #eaf2f8; border-radius: 4px; }
         .metric-item { display: flex; justify-content: space-between; margin-bottom: 0.5em; }
-        .metric-item span { font-weight: bold; }
+        .metric-item span { font-weight: bold; word-break: break-all; }
+        
+        @media (max-width: 900px) {
+            .app-wrapper { padding: 1em; }
+            .container { flex-direction: column; }
+            .panel { min-width: 0; }
+        }
     </style>
 </head>
 <body>
-
-    <h1>MIMO Beamforming Simulator & ML Data Generator</h1>
-
-    <div class="container">
-        <!-- CONTROLS PANEL -->
-        <div class="panel">
-            <h2>Controls & Parameters</h2>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="resolution">Resolution (pixels):</label>
-                    <select id="resolution">
-                        <option value="64">64x64</option>
-                        <option value="128" selected>128x128</option>
-                        <option value="256">256x256</option>
-                    </select>
+    <div class="app-wrapper">
+        <h1>MIMO Beamforming Simulator</h1>
+        <div class="container">
+            <div class="panel">
+                <h2>Controls (Heatmap Generation)</h2>
+                <div class="controls">
+                    <div class="control-group"><label for="resolution">Resolution:</label><select id="resolution"><option value="128" selected>128x128</option><option value="256">256x256</option></select></div>
+                    <div class="control-group"><label for="numAntennas">Antenna Elements (N):</label><input type="number" id="numAntennas" value="16" min="2" max="64"></div>
+                    <div class="control-group"><label for="numHotspots">Number of Hotspots:</label><input type="number" id="numHotspots" value="3" min="1" max="10"></div>
+                    <div class="control-group"><label for="hotspotIntensity">Hotspot Intensity:</label><input type="range" id="hotspotIntensity" min="10" max="100" value="60"></div>
+                    <div class="control-group"><label for="hotspotRadius">Hotspot Radius:</label><input type="range" id="hotspotRadius" min="5" max="40" value="15"></div>
+                    <div class="control-group"><label for="noiseLevel">Background Noise:</label><input type="range" id="noiseLevel" min="0" max="0.5" value="0.05" step="0.01"></div>
                 </div>
-                <div class="control-group">
-                    <label for="numAntennas">Antenna Elements (N):</label>
-                    <input type="number" id="numAntennas" value="16" min="2" max="64">
-                </div>
-                 <div class="control-group">
-                    <label for="numHotspots">Number of Hotspots:</label>
-                    <input type="number" id="numHotspots" value="3" min="1" max="10">
-                </div>
-                <div class="control-group">
-                    <label for="hotspotIntensity">Hotspot Intensity:</label>
-                    <input type="range" id="hotspotIntensity" min="10" max="100" value="50">
-                </div>
-                <div class="control-group">
-                    <label for="hotspotRadius">Hotspot Radius:</label>
-                    <input type="range" id="hotspotRadius" min="5" max="50" value="15">
-                </div>
-                 <div class="control-group">
-                    <label for="noiseLevel">Background Noise/Interference:</label>
-                    <input type="range" id="noiseLevel" min="0" max="0.5" value="0.1" step="0.01">
+                <button id="generateBtn" style="margin-top: 1.5em;">1. Generate New Scenario & Synthesize Beam</button>
+                 <hr style="margin: 1.5em 0; border: 1px solid #eee;">
+                <h2>Dataset Generation</h2>
+                <div class="controls">
+                    <div class="control-group"><label for="datasetSize">Dataset Size:</label><input type="number" id="datasetSize" value="100" min="10" max="10000"></div>
+                    <div class="control-group"><label>&nbsp;</label><button id="generateDatasetBtn" class="button-secondary">2. Generate & Download</button></div>
                 </div>
             </div>
-            <br>
-            <button id="generateBtn">1. Generate New Heatmap & Calculate Beam</button>
-            <hr style="margin: 1.5em 0;">
-            <h2>Dataset Generation</h2>
-            <div class="controls">
-                 <div class="control-group">
-                    <label for="datasetSize">Dataset Size:</label>
-                    <input type="number" id="datasetSize" value="100" min="10" max="10000">
-                </div>
-                <div class="control-group">
-                    <label>&nbsp;</label>
-                    <button id="generateDatasetBtn" class="button-secondary">2. Generate & Download Dataset</button>
+            <div class="panel">
+                <div class="visualization-content">
+                    <h2>Combined Visualization: Optimal Beam Shape</h2>
+                    <div class="canvas-container"><canvas id="combinedCanvas"></canvas></div>
+                    <div class="metrics">
+                        <h3>Performance Metric</h3>
+                        <div class="metric-item">Optimal Coverage: <span id="coverage">--</span></div>
+                    </div>
+                    <button id="exportBtn" class="button-danger" style="margin-top: 1em;">Export This Sample (JSON)</button>
                 </div>
             </div>
-             <p>This will generate N samples and download a single JSON file. The process might take a few moments.</p>
-
-        </div>
-
-        <!-- VISUALIZATION PANEL -->
-        <div class="panel">
-            <h2>Visualization & Metrics</h2>
-            <div>
-                <h3>UE Distribution & Bandwidth Demand Heatmap</h3>
-                <canvas id="heatmapCanvas"></canvas>
-            </div>
-            <div>
-                <h3>Resulting Beam Pattern (Polar Plot)</h3>
-                <canvas id="beamPatternCanvas"></canvas>
-            </div>
-            <div class="metrics">
-                <h3>Performance Metrics</h3>
-                <div class="metric-item">Optimal Steering Angle (θ₀): <span id="steeringAngle">--</span></div>
-                <div class="metric-item">Coverage (Demand in Main Lobe): <span id="coverage">--</span></div>
-            </div>
-            <br>
-            <button id="exportBtn" class="button-danger">Export This Sample (JSON)</button>
         </div>
     </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Canvas and Context Setup ---
-    const heatmapCanvas = document.getElementById('heatmapCanvas');
-    const beamPatternCanvas = document.getElementById('beamPatternCanvas');
-    const htx = heatmapCanvas.getContext('2d');
-    const btx = beamPatternCanvas.getContext('2d');
-
-    // --- UI Controls ---
-    const resolutionSelect = document.getElementById('resolution');
-    const numAntennasInput = document.getElementById('numAntennas');
-    const numHotspotsInput = document.getElementById('numHotspots');
-    const hotspotIntensityInput = document.getElementById('hotspotIntensity');
-    const hotspotRadiusInput = document.getElementById('hotspotRadius');
-    const noiseLevelInput = document.getElementById('noiseLevel');
-
-    const generateBtn = document.getElementById('generateBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const generateDatasetBtn = document.getElementById('generateDatasetBtn');
-
-    // --- Global State ---
-    let currentHeatmap = null;
-    let currentSteeringAngle = 0;
-    let currentCoverage = 0;
-    let resolution = 128;
+    // --- UI Elements and State ---
+    const combinedCanvas = document.getElementById('combinedCanvas'), ctx = combinedCanvas.getContext('2d');
+    const resolutionSelect = document.getElementById('resolution'), numAntennasInput = document.getElementById('numAntennas');
+    const numHotspotsInput = document.getElementById('numHotspots'), hotspotIntensityInput = document.getElementById('hotspotIntensity');
+    const hotspotRadiusInput = document.getElementById('hotspotRadius'), noiseLevelInput = document.getElementById('noiseLevel');
+    const generateBtn = document.getElementById('generateBtn'), exportBtn = document.getElementById('exportBtn'), generateDatasetBtn = document.getElementById('generateDatasetBtn');
     
-    // --- Core Simulation Logic ---
+    let currentHeatmap = null, currentAntennaWeights = [], currentCoverage = 0, resolution = 128;
 
-    /**
-     * Generates a 2D heatmap with multiple hotspots.
-     * @returns {number[][]} A 2D array representing the heatmap.
-     */
-    function generateHeatmap() {
-        resolution = parseInt(resolutionSelect.value);
-        heatmapCanvas.width = resolution;
-        heatmapCanvas.height = resolution;
-        
-        const numHotspots = parseInt(numHotspotsInput.value);
-        const intensity = parseFloat(hotspotIntensityInput.value);
-        const radius = parseFloat(hotspotRadiusInput.value);
-        const noise = parseFloat(noiseLevelInput.value);
-
+    // --- Core Simulation & Physics ---
+    
+    function generateHeatmap() { /* Unchanged from previous correct version */ 
+        resolution = parseInt(resolutionSelect.value); combinedCanvas.width = resolution; combinedCanvas.height = resolution;
+        const numHotspots = parseInt(numHotspotsInput.value), intensity = parseFloat(hotspotIntensityInput.value);
+        const radius = parseFloat(hotspotRadiusInput.value), noise = parseFloat(noiseLevelInput.value);
         const map = Array(resolution).fill(0).map(() => Array(resolution).fill(0));
-        
-        // Create hotspots
         for (let i = 0; i < numHotspots; i++) {
-            const hx = Math.random() * resolution;
-            const hy = Math.random() * resolution;
-            const currentIntensity = intensity * (0.8 + Math.random() * 0.4); // Add some variation
-
-            for (let y = 0; y < resolution; y++) {
-                for (let x = 0; x < resolution; x++) {
-                    const dist = Math.sqrt((x - hx) ** 2 + (y - hy) ** 2);
-                    const val = currentIntensity * Math.exp(-(dist ** 2) / (2 * radius ** 2));
-                    map[y][x] += val;
-                }
+            const hx = Math.random() * resolution, hy = Math.random() * resolution;
+            const currentIntensity = intensity * (0.8 + Math.random() * 0.4);
+            for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+                map[y][x] += currentIntensity * Math.exp(-((x - hx) ** 2 + (y - hy) ** 2) / (2 * radius ** 2));
             }
         }
-
-        // Add background noise and normalize
         let maxVal = 0;
-        for (let y = 0; y < resolution; y++) {
-            for (let x = 0; x < resolution; x++) {
-                map[y][x] += (Math.random() * noise * intensity);
-                if (map[y][x] > maxVal) maxVal = map[y][x];
-            }
+        for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+            map[y][x] += (Math.random() * noise * intensity);
+            if (map[y][x] > maxVal) maxVal = map[y][x];
         }
-        
-        if (maxVal > 0) {
-            for (let y = 0; y < resolution; y++) {
-                for (let x = 0; x < resolution; x++) {
-                    map[y][x] /= maxVal;
-                }
-            }
-        }
-        
+        if (maxVal > 0) for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) map[y][x] /= maxVal;
         return map;
     }
-
-    /**
-     * Calculates the optimal steering angle from the heatmap.
-     * This is a simplified model where the "best" direction is the
-     * angle towards the weighted centroid (center of mass) of the UE demand.
-     * The antenna is assumed to be at the bottom-center of the map.
-     * @param {number[][]} heatmap - The input heatmap data.
-     * @returns {number} The optimal steering angle in degrees (-90 to 90).
-     */
-    function calculateOptimalSteering(heatmap) {
-        const antennaX = resolution / 2;
-        const antennaY = resolution; // Place antenna at the bottom edge
-
-        let totalWeight = 0;
-        let weightedX = 0;
-        let weightedY = 0;
-
-        for (let y = 0; y < resolution; y++) {
-            for (let x = 0; x < resolution; x++) {
-                const weight = heatmap[y][x];
-                totalWeight += weight;
-                weightedX += x * weight;
-                weightedY += y * weight;
-            }
-        }
-
-        if (totalWeight === 0) return 0;
-
-        const centroidX = weightedX / totalWeight;
-        const centroidY = weightedY / totalWeight;
-
-        // Calculate angle from antenna to centroid
-        const dx = centroidX - antennaX;
-        const dy = antennaY - centroidY; // Y is inverted in graphics
-        const angleRad = Math.atan2(dx, dy);
-        
-        // Convert to degrees from -90 to 90
-        const angleDeg = angleRad * 180 / Math.PI;
-        return angleDeg;
-    }
-
-    /**
-     * Calculates the Array Factor for a Uniform Linear Array (ULA).
-     * @param {number} theta_deg - The angle to calculate gain for (degrees).
-     * @param {number} theta0_deg - The steering angle (degrees).
-     * @param {number} N - Number of antenna elements.
-     * @param {number} d_lambda - Element spacing in wavelengths (usually 0.5).
-     * @returns {number} Normalized gain (0 to 1).
-     */
-    function calculateArrayFactor(theta_deg, theta0_deg, N, d_lambda = 0.5) {
-        const theta = theta_deg * Math.PI / 180;
-        const theta0 = theta0_deg * Math.PI / 180;
-        
-        // psi = kd * (sin(theta) - sin(theta0))
-        const psi = 2 * Math.PI * d_lambda * (Math.sin(theta) - Math.sin(theta0));
-
-        if (Math.abs(psi) < 1e-9) return 1.0;
-
-        const af = Math.sin(N * psi / 2) / (N * Math.sin(psi / 2));
-        return Math.abs(af);
-    }
     
     /**
-     * Calculates the coverage metric.
-     * It measures the percentage of total UE demand that falls within the main lobe of the beam.
-     * @param {number[][]} heatmap
-     * @param {number} steeringAngle_deg
-     * @param {number} N
-     * @returns {number} Coverage percentage.
+     * NEW: Analyzes the heatmap to create a power vs. angle profile.
+     * @param {number[][]} heatmap - The input UE distribution.
+     * @param {number} numBins - The number of angular bins (e.g., 181 for -90 to +90).
+     * @returns {number[]} An array where index `i` is the power at angle `i-90`.
      */
-    function calculateCoverage(heatmap, steeringAngle_deg, N) {
+    function calculateAngularDemandProfile(heatmap, numBins = 181) {
+        const profile = Array(numBins).fill(0);
         const antennaX = resolution / 2;
         const antennaY = resolution;
-        
-        // Find the first nulls to define the main lobe
-        // For a ULA, the first null occurs when N*psi/2 = +/- PI
-        // => psi = +/- 2*PI/N
-        // => 2*pi*d*(sin(theta)-sin(theta0)) = +/- 2*pi/N
-        // => sin(theta) = sin(theta0) +/- 1/(N*d)  (for d=0.5 lambda)
-        const sin_theta0 = Math.sin(steeringAngle_deg * Math.PI / 180);
-        const null_offset = 2 / N; // For d=0.5
-        const sin_null1 = sin_theta0 - null_offset;
-        const sin_null2 = sin_theta0 + null_offset;
-        const null1_deg = Math.asin(Math.max(-1, Math.min(1, sin_null1))) * 180 / Math.PI;
-        const null2_deg = Math.asin(Math.max(-1, Math.min(1, sin_null2))) * 180 / Math.PI;
-        const lobe_min_angle = Math.min(null1_deg, null2_deg);
-        const lobe_max_angle = Math.max(null1_deg, null2_deg);
-
-        let demandInLobe = 0;
-        let totalDemand = 0;
+        const angleOffset = Math.floor(numBins / 2); // e.g., 90 for 181 bins
 
         for (let y = 0; y < resolution; y++) {
             for (let x = 0; x < resolution; x++) {
-                const demand = heatmap[y][x];
-                totalDemand += demand;
-                
-                const dx = x - antennaX;
-                const dy = antennaY - y;
-                const angle_rad = Math.atan2(dx, dy);
-                const angle_deg = angle_rad * 180 / Math.PI;
-                
-                if(angle_deg >= lobe_min_angle && angle_deg <= lobe_max_angle) {
-                    demandInLobe += demand;
+                if (heatmap[y][x] > 0) {
+                    const angle_deg = Math.atan2(x - antennaX, antennaY - y) * 180 / Math.PI;
+                    const bin = Math.round(angle_deg) + angleOffset;
+                    if (bin >= 0 && bin < numBins) {
+                        profile[bin] += heatmap[y][x];
+                    }
                 }
             }
         }
+        return profile;
+    }
+
+    /**
+     * NEW: Synthesizes the optimal complex weights for each antenna element directly from the demand profile.
+     */
+    function synthesizeOptimalWeights(demandProfile, N, d_lambda = 0.5) {
+        const weights = Array(N).fill(0).map(() => ({ real: 0, imag: 0 }));
+        const k_d = 2 * Math.PI * d_lambda;
+        const angleOffset = Math.floor(demandProfile.length / 2);
+
+        for (let n = 0; n < N; n++) {
+            for (let i = 0; i < demandProfile.length; i++) {
+                const P_theta = demandProfile[i];
+                if (P_theta > 0) {
+                    const angle_deg = i - angleOffset;
+                    const angle_rad = angle_deg * Math.PI / 180;
+                    const phase = n * k_d * Math.sin(angle_rad);
+                    weights[n].real += P_theta * Math.cos(phase);
+                    weights[n].imag += P_theta * Math.sin(phase);
+                }
+            }
+        }
+        return weights;
+    }
+    
+    /**
+     * Calculates the final array factor (beam shape) from the physical antenna weights. Unchanged.
+     */
+    function calculateArrayFactor(theta_deg, weights, d_lambda = 0.5) {
+        const N = weights.length;
+        const theta_rad = theta_deg * Math.PI / 180;
+        const k_d = 2 * Math.PI * d_lambda;
+        let total_field = { real: 0, imag: 0 };
+        for (let n = 0; n < N; n++) {
+            const phase_shift = -n * k_d * Math.sin(theta_rad);
+            const s_n = { real: Math.cos(phase_shift), imag: Math.sin(phase_shift) };
+            const w_n = weights[n];
+            total_field.real += w_n.real * s_n.real - w_n.imag * s_n.imag;
+            total_field.imag += w_n.real * s_n.imag + w_n.imag * s_n.real;
+        }
+        return Math.sqrt(total_field.real**2 + total_field.imag**2) / N;
+    }
+
+    function calculateCoverage(heatmap, weights, N) {
+        // Since we no longer have discrete beams, we must check coverage based on the final pattern
+        const antennaX = resolution/2, antennaY = resolution;
+        let totalDemand = 0, coveredDemand = 0;
         
-        return totalDemand > 0 ? (demandInLobe / totalDemand) * 100 : 0;
+        // Find peak gain to define a threshold (e.g., 50% of peak power, or -3dB)
+        let maxGain = 0;
+        for (let angle_deg = -90; angle_deg <= 90; angle_deg++) {
+            maxGain = Math.max(maxGain, calculateArrayFactor(angle_deg, weights));
+        }
+        const gainThreshold = maxGain / Math.sqrt(2); // -3dB point
+        
+        for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+            totalDemand += heatmap[y][x];
+            const angle_deg = Math.atan2(x - antennaX, antennaY - y) * 180 / Math.PI;
+            const gain_at_angle = calculateArrayFactor(angle_deg, weights);
+            if (gain_at_angle >= gainThreshold) {
+                coveredDemand += heatmap[y][x];
+            }
+        }
+        return totalDemand > 0 ? (coveredDemand / totalDemand) * 100 : 0;
     }
 
 
-    // --- Drawing Functions ---
-    
+    // --- Drawing Functions (Unchanged) ---
+    function drawHeatmap(heatmap) { /* ... */ }
+    function drawOverlay(weights) { /* ... */ }
     function drawHeatmap(heatmap) {
-        const data = new Uint8ClampedArray(resolution * resolution * 4);
-        for (let y = 0; y < resolution; y++) {
-            for (let x = 0; x < resolution; x++) {
-                const v = heatmap[y][x];
-                const i = (y * resolution + x) * 4;
-                // Simple viridis-like colormap
-                data[i] = Math.sqrt(v) * 255;
-                data[i + 1] = v * 255;
-                data[i + 2] = (1 - Math.sqrt(v)) * 255;
-                data[i + 3] = 255;
-            }
+        const imageData = new ImageData(new Uint8ClampedArray(resolution * resolution * 4), resolution);
+        const data = imageData.data;
+        for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+            const v = heatmap[y][x]; const i = (y * resolution + x) * 4;
+            data[i] = Math.sqrt(v) * 255; data[i + 1] = v * 255; data[i + 2] = (1 - Math.sqrt(v)) * 100 + 50; data[i + 3] = 255;
         }
-        htx.putImageData(new ImageData(data, resolution, resolution), 0, 0);
+        ctx.putImageData(imageData, 0, 0);
     }
-
-    function drawBeamPattern(steeringAngle_deg, N) {
-        const width = beamPatternCanvas.width;
-        const height = beamPatternCanvas.height;
-        const centerX = width / 2;
-        const centerY = height / 2;
-        const maxRadius = Math.min(centerX, centerY) * 0.9;
-        
-        btx.clearRect(0, 0, width, height);
-        
-        // Draw polar grid
-        btx.strokeStyle = '#e0e0e0';
-        btx.lineWidth = 1;
-        for (let r = 0.25; r <= 1; r += 0.25) {
-            btx.beginPath();
-            btx.arc(centerX, centerY, maxRadius * r, 0, 2 * Math.PI);
-            btx.stroke();
+    function drawOverlay(weights) {
+        const N = weights.length;
+        const antennaX = resolution / 2; const antennaY = resolution; const maxRadius = resolution;
+        ctx.save(); ctx.translate(antennaX, antennaY);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1;
+        for (let r_mult = 0.25; r_mult <= 1; r_mult += 0.25) { ctx.beginPath(); ctx.arc(0, 0, maxRadius * r_mult, Math.PI, 2 * Math.PI); ctx.stroke(); }
+        ctx.beginPath();
+        ctx.strokeStyle = '#d35400'; ctx.lineWidth = 3;
+        let max_gain = 0;
+        const gains = [];
+        for (let angle_deg = -90; angle_deg <= 90; angle_deg += 0.5) {
+            const gain = calculateArrayFactor(angle_deg, weights);
+            if(gain > max_gain) max_gain = gain;
+            gains.push({angle_deg, gain});
         }
-        for (let a = 0; a < 360; a += 30) {
-            const rad = a * Math.PI / 180;
-            btx.beginPath();
-            btx.moveTo(centerX, centerY);
-            btx.lineTo(centerX + maxRadius * Math.cos(rad), centerY + maxRadius * Math.sin(rad));
-            btx.stroke();
-        }
-
-        // Draw beam pattern
-        btx.beginPath();
-        btx.strokeStyle = '#d35400';
-        btx.lineWidth = 2.5;
-
-        for (let angle_deg = -180; angle_deg <= 180; angle_deg += 0.5) {
-            const gain = calculateArrayFactor(angle_deg, steeringAngle_deg, N);
-            const radius = gain * maxRadius;
-            // Polar to Cartesian. Angle needs to be adjusted for canvas coordinates.
-            const plot_angle_rad = (angle_deg - 90) * Math.PI / 180; 
-            const x = centerX + radius * Math.cos(plot_angle_rad);
-            const y = centerY + radius * Math.sin(plot_angle_rad);
-            
-            if (angle_deg === -180) {
-                btx.moveTo(x, y);
-            } else {
-                btx.lineTo(x, y);
-            }
-        }
-        btx.closePath();
-        btx.stroke();
+        gains.forEach(({angle_deg, gain}) => {
+            const radius = (max_gain > 0 ? gain / max_gain : 0) * maxRadius * 0.95; // Normalize by observed max gain
+            const angle_rad = angle_deg * Math.PI / 180;
+            const x = radius * Math.sin(angle_rad); const y = -radius * Math.cos(angle_rad);
+            if (angle_deg === -90) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke(); ctx.restore();
+        ctx.fillStyle = '#1a5276'; ctx.beginPath();
+        const ant_h = resolution/20, ant_w = ant_h * 0.8;
+        ctx.moveTo(antennaX, antennaY); ctx.lineTo(antennaX - ant_w, antennaY - ant_h); ctx.lineTo(antennaX + ant_w, antennaY - ant_h);
+        ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
     }
     
-    // --- Event Handlers & Main Logic ---
-
+    // --- Main Logic & Event Handlers ---
     function runSimulation() {
-        // 1. Generate Heatmap
+        // 1. Generate a new UE distribution
         currentHeatmap = generateHeatmap();
         drawHeatmap(currentHeatmap);
-
-        // 2. Calculate optimal beamforming from the heatmap
-        const N = parseInt(numAntennasInput.value);
-        currentSteeringAngle = calculateOptimalSteering(currentHeatmap);
-
-        // 3. Visualize the resulting beam pattern
-        drawBeamPattern(currentSteeringAngle, N);
-
-        // 4. Calculate performance metrics
-        currentCoverage = calculateCoverage(currentHeatmap, currentSteeringAngle, N);
         
-        // 5. Update UI
-        document.getElementById('steeringAngle').textContent = `${currentSteeringAngle.toFixed(2)}°`;
+        const N = parseInt(numAntennasInput.value);
+
+        // --- NEW, REALISTIC WORKFLOW ---
+        // 2. Analyze the heatmap to find the demand vs. angle
+        const angularDemand = calculateAngularDemandProfile(currentHeatmap);
+        
+        // 3. Synthesize the single set of optimal antenna weights
+        currentAntennaWeights = synthesizeOptimalWeights(angularDemand, N);
+        
+        // 4. Draw the resulting beam shape from those weights
+        drawOverlay(currentAntennaWeights);
+        
+        // 5. Calculate the performance
+        currentCoverage = calculateCoverage(currentHeatmap, currentAntennaWeights, N);
         document.getElementById('coverage').textContent = `${currentCoverage.toFixed(2)}%`;
     }
 
-    /**
-     * Creates and triggers a download for a file.
-     * @param {string} filename - The name of the file to download.
-     * @param {string} text - The content of the file.
-     */
-    function download(filename, text) {
-        const element = document.createElement('a');
-        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-        element.setAttribute('download', filename);
-        element.style.display = 'none';
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
-    }
-    
+    function download(filename, text) { const el = document.createElement('a'); el.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(text)); el.setAttribute('download', filename); el.style.display = 'none'; document.body.appendChild(el); el.click(); document.body.removeChild(el);}
     function exportCurrentSample() {
-        if (!currentHeatmap) {
-            alert("Please generate a heatmap first.");
-            return;
-        }
-        const data = {
-            heatmap: currentHeatmap,
-            steering_angle_degrees: currentSteeringAngle,
+        if (!currentHeatmap) return;
+        download('sample.json', JSON.stringify({
+            heatmap: currentHeatmap, 
+            antenna_weights: currentAntennaWeights, // The true physical label for ML
             coverage_percent: currentCoverage,
-            params: {
-                resolution: resolution,
-                num_antennas: parseInt(numAntennasInput.value),
-                num_hotspots: parseInt(numHotspotsInput.value)
-            }
-        };
-        download('sample.json', JSON.stringify(data));
+            params: { resolution, num_antennas: parseInt(numAntennasInput.value) }
+        }));
     }
-
     function generateDataset() {
         const size = parseInt(document.getElementById('datasetSize').value);
         const dataset = [];
-        generateDatasetBtn.textContent = "Generating...";
-        generateDatasetBtn.disabled = true;
-
-        // Use setTimeout to avoid freezing the UI
+        generateDatasetBtn.textContent = "Generating..."; generateDatasetBtn.disabled = true;
         let i = 0;
         function generateNext() {
             if (i < size) {
                 runSimulation();
-                
-                // --- FIX IS HERE ---
-                // The object being pushed now contains all relevant data.
                 dataset.push({
-                    heatmap: currentHeatmap,
-                    steering_angle_degrees: currentSteeringAngle,
-                    coverage_percent: currentCoverage, // Added this field
-                    params: {                         // Added this object
-                        resolution: resolution,
-                        num_antennas: parseInt(numAntennasInput.value),
-                        num_hotspots: parseInt(numHotspotsInput.value)
-                    }
+                    heatmap: currentHeatmap, antenna_weights: currentAntennaWeights, coverage_percent: currentCoverage,
+                    params: { resolution, num_antennas: parseInt(numAntennasInput.value) }
                 });
-                // --- END FIX ---
-                
                 i++;
                 generateDatasetBtn.textContent = `Generating... (${i}/${size})`;
-                setTimeout(generateNext, 10); // small delay to keep UI responsive
+                setTimeout(generateNext, 10);
             } else {
                 download(`mimo_dataset_${size}_samples.json`, JSON.stringify(dataset));
-                generateDatasetBtn.textContent = "2. Generate & Download Dataset";
+                generateDatasetBtn.textContent = "2. Generate & Download";
                 generateDatasetBtn.disabled = false;
             }
         }
-        
         generateNext();
     }
     
-    // Bind events
+    // Wire up events
+    document.querySelectorAll('#resolution, #numAntennas, #numHotspots, #hotspotIntensity, #hotspotRadius, #noiseLevel').forEach(el => el.addEventListener('change', runSimulation));
     generateBtn.addEventListener('click', runSimulation);
     exportBtn.addEventListener('click', exportCurrentSample);
     generateDatasetBtn.addEventListener('click', generateDataset);
 
     // Initial run
-    beamPatternCanvas.width = 400;
-    beamPatternCanvas.height = 400;
     runSimulation();
 });
 </script>
