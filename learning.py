@@ -203,7 +203,7 @@ def evaluate_and_plot(model, test_loader, history, device, num_antennas):
     model.eval()
     
     plt.style.use('seaborn-v0_8-whitegrid')
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(history['train_loss'], label='Training Loss', color='b')
     ax.plot(history['val_loss'], label='Validation Loss', color='r')
     ax.set_title('Model Training and Validation Loss', fontsize=20); ax.set_xlabel('Epoch', fontsize=12); ax.set_ylabel('Mean Squared Error (MSE)', fontsize=20)
@@ -230,7 +230,7 @@ def evaluate_and_plot(model, test_loader, history, device, num_antennas):
     pred_mag = np.abs(pred_complex).flatten(); label_mag = np.abs(label_complex).flatten()
     pred_phase = np.angle(pred_complex, deg=True).flatten(); label_phase = np.angle(label_complex, deg=True).flatten()
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
     ax1.scatter(label_mag, pred_mag, alpha=0.3, edgecolors='none'); ax1.plot([min(label_mag), max(label_mag)], [min(label_mag), max(label_mag)], 'r--', lw=2, label='Ideal')
     ax1.set_title('Weight Magnitude Prediction', fontsize=20); ax1.set_xlabel('Actual Magnitude', fontsize=12); ax1.set_ylabel('Predicted Magnitude', fontsize=12)
     ax1.grid(True); ax1.legend()
