@@ -49,8 +49,7 @@ class MIMODataset(Dataset):
             weights_array[2 * i] = w['real']
             weights_array[2 * i + 1] = w['imag']
             
-        weights_tensor = torch.from_numpy(weights_array)
-        
+        weights_tensor = torch.from_numpy(weights_array)        
         return heatmap_tensor, weights_tensor
 
 def create_dummy_dataset(json_path: Path, num_antennas: int, resolution: int):
@@ -156,7 +155,7 @@ def main(args):
     if args.num_antennas and args.num_antennas != inferred_ant:
         print(f"Warning: CLI --num-antennas ({args.num_antennas}) overrides dataset value ({inferred_ant}).")
 
-    train_size = int(0.7 * len(dataset)); val_size = int(0.15 * len(dataset)); test_size = len(dataset) - train_size - val_size
+    train_size = int(0.8 * len(dataset)); val_size = int(0.1 * len(dataset)); test_size = len(dataset) - train_size - val_size
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
