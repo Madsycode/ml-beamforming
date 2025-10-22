@@ -1,7 +1,7 @@
 # CNN-BASED BEAMFORMING
 
-![Baseline](bseline.png)
+![Baseline](baseline.png)
 
 ![Training Loss](training.png)
 
-![Predicted Beam Pattern](predited.png)
+![Predicted Beam](predicted.png)
