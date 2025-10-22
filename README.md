@@ -1,9 +1,7 @@
-# ML-BASED BEAMFORMING WITH UE DESINTY MAP
+# CNN-BASED BEAMFORMING
 
-![Preview](preview.jpeg)
+![Baseline](bseline.png)
 
 ![Training Loss](training.png)
 
-![Magnitude and Phase](evaluation.png)
-
-![Predicted Beam Pattern](comparison.png)
+![Predicted Beam Pattern](predited.png)

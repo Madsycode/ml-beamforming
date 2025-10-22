@@ -153,182 +153,21 @@ if torch.cuda.is_available():
 else:
     print("CUDA not available. Training on CPU.")
     
-model = CNNBeam(N).to(device)
-optimizer = Adam(model.parameters(), lr=1e-3)
-
-num_epochs = 100
-train_losses = []
-val_losses = []
-val_mses = []
-
-for epoch in range(num_epochs):
-    model.train()
-    total_train_loss = 0
-    for D_batch, w_batch in train_loader:
-        D_batch = D_batch.to(device)
-        w_batch = w_batch.to(device)
-        optimizer.zero_grad()
-        pred = model(D_batch)
-        loss = alignment_loss(pred, w_batch, N)
-        loss.backward()
-        optimizer.step()
-        total_train_loss += loss.item()
-    avg_train_loss = total_train_loss / len(train_loader)
-    train_losses.append(avg_train_loss)
-    print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_train_loss:.4f}')
-
-    # Validation
-    model.eval()
-    total_val_loss = 0
-    total_val_mse = 0
-    with torch.no_grad():
-        for D_batch, w_batch in test_loader:
-            D_batch = D_batch.to(device)
-            w_batch = w_batch.to(device)
-            pred = model(D_batch)
-            val_loss = alignment_loss(pred, w_batch, N)
-            val_mse = compute_mse(pred, w_batch, N, device)
-            total_val_loss += val_loss.item()
-            total_val_mse += val_mse.item()
-    avg_val_loss = total_val_loss / len(test_loader)
-    avg_val_mse = total_val_mse / len(test_loader)
-    val_losses.append(avg_val_loss)
-    val_mses.append(avg_val_mse)
-    print(f'Epoch {epoch+1}/{num_epochs}, Val Loss: {avg_val_loss:.4f}, Val MSE: {avg_val_mse:.4f}')
-
-# Export the trained model
-model_path = 'model.pth'
-torch.save(model.state_dict(), model_path)
-print(f"Model saved to {model_path}")
-
 # Reload model for inference
+model_path = 'model.pth'
 loaded_model = CNNBeam(N).to(device)
 loaded_model.load_state_dict(torch.load(model_path))
 loaded_model.eval()
 print("Model reloaded for inference")
 
-# Plot training and validation losses
-plt.figure(figsize=(8, 5))
-plt.plot(range(1, num_epochs+1), train_losses, label='Train Loss')
-plt.plot(range(1, num_epochs+1), val_losses, label='Val Loss')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.title('Training and Validation Loss')
-plt.legend()
-plt.show()
-
-# Cost Profile: Measure computation time for baseline and CNN
-num_samples = len(Ds_test)
-baseline_times = []
-cnn_times = []
-
-# Baseline computation (eigen-decomposition)
-for i in range(num_samples):
-    start_time = time.time()
-    R = compute_R(Ds_test[i], THETA, PHI, k0, d, N_h, N_v)
-    eigenvalues, eigenvectors = np.linalg.eigh(R)
-    idx = np.argsort(eigenvalues)[::-1]
-    w_baseline = eigenvectors[:, idx[0]]  # Top eigenvector
-    baseline_times.append((time.time() - start_time) * 1000)  # Convert to milliseconds
-
-# CNN computation with loaded model
-loaded_model.eval()
-with torch.no_grad():
-    for i in range(num_samples):
-        D_i = test_dataset.Ds[i].unsqueeze(0).to(device)
-        start_time = time.time()
-        pred = loaded_model(D_i)[0].cpu().numpy()
-        cnn_times.append((time.time() - start_time) * 1000)  # Convert to milliseconds
-
-# Plot cost profile
-plt.figure(figsize=(8, 5))
-methods = ['Baseline', 'CNN']
-avg_times = [np.mean(baseline_times), np.mean(cnn_times)]
-plt.bar(methods, avg_times, color=['blue', 'green'])
-plt.ylabel('Average Computation Time (milliseconds)')
-plt.title('Cost Profile: Average Beam Generation Time')
-for i, v in enumerate(avg_times):
-    plt.text(i, v + 0.5, f'{v:.2f}', ha='center', va='bottom')
-plt.show()
-
-# Print average times
-avg_baseline_time = np.mean(baseline_times)
-avg_cnn_time = np.mean(cnn_times)
-print(f'Average Baseline Computation Time: {avg_baseline_time:.2f} milliseconds')
-print(f'Average CNN Computation Time: {avg_cnn_time:.2f} milliseconds')
-
-# Evaluation: Compute average efficiency on test set with loaded model
-loaded_model.eval()
-efficiencies = []
-with torch.no_grad():
-    for i in range(len(Ds_test)):
-        D_i = test_dataset.Ds[i].unsqueeze(0).to(device)  # (1,1,S,S)
-        pred = loaded_model(D_i)[0].cpu().numpy()  # (2*N,)
-        pred_real = pred[:N]
-        pred_imag = pred[N:]
-        w_pred = pred_real + 1j * pred_imag
-        w_pred /= np.linalg.norm(w_pred) + 1e-8
-
-        w_gt = ws_test[i]
-
-        R = compute_R(Ds_test[i], THETA, PHI, k0, d, N_h, N_v)
-        coverage_pred = np.real(w_pred.conj().T @ (R @ w_pred))
-        baseline = coverages_test[i]
-        efficiency = coverage_pred / baseline if baseline > 0 else 0
-        efficiencies.append(efficiency)
-
-avg_efficiency = np.mean(efficiencies)
-print(f'Average efficiency on test set with reloaded model: {avg_efficiency:.4f} (closer to 1 is better)')
-
-# Collect predicted vs ground truth weights for scatter plots
-loaded_model.eval()
-all_pred_weights = []
-all_gt_weights = []
-with torch.no_grad():
-    for D_batch, w_batch in test_loader:
-        D_batch = D_batch.to(device)
-        pred = loaded_model(D_batch).cpu().numpy()  # (B, 2*N)
-        pred_real = pred[:, :N]
-        pred_imag = pred[:, N:]
-        w_pred = pred_real + 1j * pred_imag
-        w_gt = w_batch.numpy()[:, :N] + 1j * w_batch.numpy()[:, N:]
-        all_pred_weights.append(w_pred)
-        all_gt_weights.append(w_gt)
-
-all_pred_weights = np.concatenate(all_pred_weights, axis=0)
-all_gt_weights = np.concatenate(all_gt_weights, axis=0)
-
-# Scatter plots for magnitude and phase
-plt.figure(figsize=(8, 10))
-
-# Magnitude scatter
-plt.subplot(2, 1, 1)
-plt.scatter(np.abs(all_gt_weights).flatten(), np.abs(all_pred_weights).flatten(), alpha=0.5)
-plt.plot([0, np.max(np.abs(all_gt_weights))], [0, np.max(np.abs(all_pred_weights))], 'r--', label='Ideal')
-plt.xlabel('Ground Truth Magnitude')
-plt.ylabel('Predicted Magnitude')
-plt.title('Magnitude: Predicted vs Ground Truth')
-plt.legend()
-
-# Phase scatter
-plt.subplot(2, 1, 2)
-plt.scatter(np.angle(all_gt_weights).flatten(), np.angle(all_pred_weights).flatten(), alpha=0.5)
-plt.plot([-np.pi, np.pi], [-np.pi, np.pi], 'r--', label='Ideal')
-plt.xlabel('Ground Truth Phase (radians)')
-plt.ylabel('Predicted Phase (radians)')
-plt.title('Phase: Predicted vs Ground Truth')
-plt.legend()
-plt.tight_layout()
-plt.show()
-
 # Visualize for one test sample
-idx = 8  # First test sample
-D_vis = Ds_test[idx]
-w_gt_vis = ws_test[idx]
+idx = 550  # First test sample
+D_vis = Ds_train[idx]
+w_gt_vis = ws_train[idx]
 R_vis = compute_R(D_vis, THETA, PHI, k0, d, N_h, N_v)
 
 with torch.no_grad():
-    D_i = test_dataset.Ds[idx].unsqueeze(0).to(device)
+    D_i = train_dataset.Ds[idx].unsqueeze(0).to(device)
     pred = loaded_model(D_i)[0].cpu().numpy()
     pred_real = pred[:N]
     pred_imag = pred[N:]

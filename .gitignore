@@ -1,3 +1,5 @@
 **/.env
 *.json
 *.tex
+*.h5
+*.pth
