@@ -1,5 +1,8 @@
 **/.env
+**/figures
+**/models
 *.json
 *.tex
 *.h5
 *.pth
+logs.md
